@@ -2,7 +2,7 @@ import React from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 
 type SettingsScreenProps = {
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
 };
 
 const SettingsScreen: React.FC<SettingsScreenProps> = ({ onLogout }) => {

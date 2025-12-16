@@ -2,14 +2,17 @@ import React from 'react';
 import { Button, StyleSheet, Text, View } from 'react-native';
 
 type LoginScreenProps = {
-  onLogin: () => void;
+  onSignInTest: () => void | Promise<void>;
+  onLogout: () => void | Promise<void>;
+  isLoggedIn: boolean;
 };
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onSignInTest, onLogout, isLoggedIn }) => {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>LoginScreen</Text>
-      <Button title="Log In" onPress={onLogin} />
+      <Button title="Sign in (test)" onPress={onSignInTest} />
+      {isLoggedIn && <Button title="Sign out" onPress={onLogout} />}
     </View>
   );
 };
@@ -20,6 +23,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 16,
+    gap: 12,
   },
   title: {
     fontSize: 20,
