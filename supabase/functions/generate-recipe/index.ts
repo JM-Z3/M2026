@@ -81,7 +81,8 @@ const generateWithGemini = async (apiKey: string, query: string, stricter: boole
             },
           ],
           generationConfig: {
-            response_mime_type: 'application/json',
+            temperature: 0.4,
+            maxOutputTokens: 1024,
           },
         }),
       }
