@@ -16,7 +16,7 @@ type GeminiResponse = {
   }>;
 };
 
-const MODEL = 'gemini-1.5-flash';
+const MODEL = 'gemini-2.0-flash';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
