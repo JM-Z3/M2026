@@ -81,14 +81,15 @@ const generateWithGemini = async (apiKey: string, query: string, stricter: boole
             },
           ],
           generationConfig: {
-            responseMimeType: 'application/json',
+            response_mime_type: 'application/json',
           },
         }),
       }
     );
 
     if (!response.ok) {
-      return { error: `Gemini request failed with status ${response.status}` };
+      const errorText = await response.text();
+      return { error: `Gemini failed ${response.status}: ${errorText}` };
     }
 
     const data = (await response.json()) as GeminiResponse;
