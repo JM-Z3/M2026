@@ -19,6 +19,18 @@ const HomeScreen: React.FC<Props> = ({ navigation }) => {
       <View style={styles.buttonWrapper}>
         <Button title="View Recipe" onPress={() => navigation.navigate('Recipe')} />
       </View>
+      <View style={styles.buttonWrapper}>
+        <Button title="Fitness recipe (text)" onPress={() => navigation.navigate('RecipeSearch')} />
+      </View>
+      <View style={styles.buttonWrapper}>
+        <Button title="Favorites" onPress={() => navigation.navigate('Favorites')} />
+      </View>
+      <View style={styles.buttonWrapper}>
+        <Button title="History" onPress={() => navigation.navigate('History')} />
+      </View>
+      <View style={styles.buttonWrapper}>
+        <Button title="Settings" onPress={() => navigation.navigate('Settings')} />
+      </View>
     </View>
   );
 };

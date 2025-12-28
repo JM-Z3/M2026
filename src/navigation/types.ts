@@ -1,14 +1,12 @@
-import { NavigatorScreenParams } from '@react-navigation/native';
+import { FitnessRecipe } from '../types/recipe';
 
 export type HomeStackParamList = {
   Home: undefined;
   IngredientsScan: undefined;
   IngredientsConfirm: undefined;
   Recipe: undefined;
-};
-
-export type TabParamList = {
-  HomeStack: NavigatorScreenParams<HomeStackParamList>;
+  RecipeSearch: undefined;
+  RecipeResult: { recipe: FitnessRecipe };
   Favorites: undefined;
   History: undefined;
   Settings: undefined;

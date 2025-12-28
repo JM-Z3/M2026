@@ -1,30 +1,31 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import { enableScreens } from 'react-native-screens';
 import { Session } from '@supabase/supabase-js';
 
+import LoginScreen from '../screens/LoginScreen';
 import HomeStackNavigator from './HomeStackNavigator';
-import AuthStackNavigator from './AuthStackNavigator';
 
-type Props = {
+enableScreens();
+
+type RootNavigatorProps = {
   session: Session | null;
-  isLoading: boolean;
-  onSignInTest: () => void;
+  onSignInTest: () => Promise<void>;
+  onLogout: () => Promise<void>;
 };
 
-export default function RootNavigator({
-  session,
-  isLoading,
-  onSignInTest,
-}: Props) {
-  if (isLoading) return null;
+const RootNavigator: React.FC<RootNavigatorProps> = ({ session, onSignInTest, onLogout }) => {
+  const isLoggedIn = Boolean(session);
 
   return (
     <NavigationContainer>
-      {session ? (
-        <HomeStackNavigator />
+      {isLoggedIn ? (
+        <HomeStackNavigator onLogout={onLogout} />
       ) : (
-        <AuthStackNavigator onSignInTest={onSignInTest} />
+        <LoginScreen onSignInTest={onSignInTest} onLogout={onLogout} isLoggedIn={isLoggedIn} />
       )}
     </NavigationContainer>
   );
-}
+};
+
+export default RootNavigator;
