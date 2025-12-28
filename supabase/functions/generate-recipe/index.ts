@@ -142,7 +142,7 @@ serve(async (req) => {
   const firstAttempt = await generateWithGemini(apiKey, trimmedQuery, false);
   if ('error' in firstAttempt) {
     return new Response(JSON.stringify({ error: firstAttempt.error }), {
-      status: 502,
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
@@ -153,7 +153,7 @@ serve(async (req) => {
     const retry = await generateWithGemini(apiKey, trimmedQuery, true);
     if ('error' in retry) {
       return new Response(JSON.stringify({ error: retry.error }), {
-        status: 502,
+        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -162,7 +162,7 @@ serve(async (req) => {
 
   if (!parsedRecipe) {
     return new Response(JSON.stringify({ error: 'Model response was not valid JSON' }), {
-      status: 502,
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
