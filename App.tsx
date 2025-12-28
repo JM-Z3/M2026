@@ -58,11 +58,13 @@ export default function App() {
   };
 
   return (
-    <>
-      <StatusBar style="auto" />
-      {!isLoadingSession && (
-        <RootNavigator session={session} onSignInTest={handleSignInTest} onLogout={handleSignOut} />
-      )}
-    </>
-  );
+  <>
+    <StatusBar style="auto" />
+    <RootNavigator
+      session={session}
+      isLoading={isLoadingSession}
+      onSignInTest={handleSignInTest}
+    />
+  </>
+);
 }
