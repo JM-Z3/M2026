@@ -7,7 +7,6 @@ type FitnessRecipe = {
   ingredients: Array<{ name: string; quantity: string }>;
   steps: string[];
   macros_per_serving: { calories: number; protein_g: number; carbs_g: number; fat_g: number };
-  notes: string[];
 };
 
 type GeminiResponse = {
@@ -16,7 +15,7 @@ type GeminiResponse = {
   }>;
 };
 
-const MODEL = 'gemini-2.0-flash';
+const MODEL = 'gemini-2.5-flash';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,21 +23,19 @@ const corsHeaders = {
 };
 
 const buildPrompt = (query: string, stricter = false) => {
-  const baseInstructions = `You are an assistant that outputs ONLY valid JSON with no markdown or code fences.
-Generate exactly one fitness-friendly recipe that matches the user's request.
-Respond with an object that matches this exact TypeScript type:
+  const baseInstructions = `Return ONLY valid JSON (no markdown, no code fences, no explanations).
+The JSON MUST match exactly this shape:
 {
   "title": string,
   "servings": number,
   "total_time_minutes": number,
   "ingredients": Array<{ "name": string, "quantity": string }>,
   "steps": string[],
-  "macros_per_serving": { "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number },
-  "notes": string[]
+  "macros_per_serving": { "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number }
 }`;
 
   const stricterSuffix = `
-Return ONLY the JSON object—no prose. If your answer is not valid JSON, you will be rejected. Do not include markdown fences.`;
+If you do not produce valid JSON, the request will fail. No extra keys or text.`;
 
   return `${baseInstructions}
 User request: ${query}.${stricter ? stricterSuffix : ''}`;
@@ -67,7 +64,7 @@ const generateWithGemini = async (apiKey: string, query: string, stricter: boole
   const prompt = buildPrompt(query, stricter);
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/${MODEL}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
@@ -76,14 +73,9 @@ const generateWithGemini = async (apiKey: string, query: string, stricter: boole
         body: JSON.stringify({
           contents: [
             {
-              role: 'user',
               parts: [{ text: prompt }],
             },
           ],
-          generationConfig: {
-            temperature: 0.4,
-            maxOutputTokens: 1024,
-          },
         }),
       }
     );
@@ -149,7 +141,7 @@ serve(async (req) => {
     });
   }
 
-  let parsedRecipe = firstAttempt.text ? parseRecipe(firstAttempt.text) : null;
+  const parsedRecipe = firstAttempt.text ? parseRecipe(firstAttempt.text) : null;
 
   if (!parsedRecipe) {
     const retry = await generateWithGemini(apiKey, trimmedQuery, true);
@@ -159,12 +151,15 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
-    parsedRecipe = retry.text ? parseRecipe(retry.text) : null;
-  }
-
-  if (!parsedRecipe) {
-    return new Response(JSON.stringify({ error: 'Model response was not valid JSON' }), {
-      status: 500,
+    const retriedRecipe = retry.text ? parseRecipe(retry.text) : null;
+    if (!retriedRecipe) {
+      return new Response(JSON.stringify({ error: 'Model response was not valid JSON' }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify(retriedRecipe), {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
