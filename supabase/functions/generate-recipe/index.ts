@@ -64,7 +64,7 @@ const generateWithGemini = async (apiKey: string, query: string, stricter: boole
   const prompt = buildPrompt(query, stricter);
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: {
