@@ -10,19 +10,16 @@ type FitnessRecipe = {
   notes: string[];
 };
 
-type OpenRouterChoice = {
-  message?: { content?: string; reasoning?: string };
-  finish_reason?: string;
-  native_finish_reason?: string;
-};
-
 type OpenRouterResponse = {
-  choices?: OpenRouterChoice[];
+  choices?: Array<{
+    message?: { content?: string };
+  }>;
 };
 
 const MODEL = 'deepseek/deepseek-r1-0528:free';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MAX_TOKENS = 700;
+const MAX_TOKENS = 600;
+const TEMPERATURE = 0.4;
 const TIMEOUT_MS = 20_000;
 
 const corsHeaders = {
@@ -30,20 +27,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const systemPrompt = `You are a concise recipe generator. Return ONLY valid JSON (no markdown, no code fences, no explanations).
-The JSON MUST match exactly this shape:
-{
-  "title": string,
-  "servings": number,
-  "total_time_minutes": number,
-  "ingredients": Array<{ "name": string, "quantity": string }>,
-  "steps": string[],
-  "macros_per_serving": { "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number },
-  "notes": string[]
-}`;
-
-const stricterSystemPrompt = `${systemPrompt}
-Do not include any extra text. Keep steps to 6 or fewer and notes to 2 or fewer items.`;
+const systemPrompt = `Respond ONLY with valid JSON. No markdown, no code fences.`;
 
 const extractJsonCandidate = (rawText: string): string => {
   const trimmedStart = rawText.trimStart();
@@ -85,7 +69,7 @@ const callOpenRouter = async ({
   apiKey: string;
   system: string;
   user: string;
-}): Promise<{ text?: string; finishReason?: string; error?: string }> => {
+}): Promise<{ text?: string; error?: string }> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
@@ -100,7 +84,7 @@ const callOpenRouter = async ({
       body: JSON.stringify({
         model: MODEL,
         stream: false,
-        temperature: 0.4,
+        temperature: TEMPERATURE,
         max_tokens: MAX_TOKENS,
         messages: [
           { role: 'system', content: system },
@@ -118,12 +102,8 @@ const callOpenRouter = async ({
     }
 
     const data = (await response.json()) as OpenRouterResponse;
-    const choice = data.choices?.[0];
-    const finishReason = choice?.finish_reason ?? choice?.native_finish_reason;
-    const content = choice?.message?.content?.trimStart();
-    const reasoning = choice?.message?.reasoning?.trimStart();
-    const text = content && content.length > 0 ? content : reasoning ?? '';
-    return { text, finishReason };
+    const text = data.choices?.[0]?.message?.content?.trimStart() ?? '';
+    return { text };
   } catch (error) {
     clearTimeout(timeout);
     return { error: error instanceof Error ? error.message : 'Unexpected OpenRouter request error' };
@@ -173,7 +153,17 @@ serve(async (req) => {
   const primary = await callOpenRouter({
     apiKey,
     system: systemPrompt,
-    user: `User request: ${trimmedQuery}`,
+    user: `Generate a fitness-friendly recipe for: ${trimmedQuery}.
+The response MUST be valid JSON matching:
+{
+  "title": string,
+  "servings": number,
+  "total_time_minutes": number,
+  "ingredients": Array<{ "name": string, "quantity": string }>,
+  "steps": string[],
+  "macros_per_serving": { "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number },
+  "notes": string[]
+}`,
   });
 
   if ('error' in primary && primary.error) {
@@ -184,30 +174,10 @@ serve(async (req) => {
   }
 
   const parsedPrimary = primary.text ? parseRecipe(primary.text) : null;
+
   if (!parsedPrimary) {
-    const retry = await callOpenRouter({
-      apiKey,
-      system: stricterSystemPrompt,
-      user: `User request: ${trimmedQuery}`,
-    });
-
-    if ('error' in retry && retry.error) {
-      return new Response(JSON.stringify({ error: retry.error }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const retriedRecipe = retry.text ? parseRecipe(retry.text) : null;
-    if (!retriedRecipe) {
-      return new Response(JSON.stringify({ error: 'Model response was not valid JSON' }), {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    return new Response(JSON.stringify(retriedRecipe), {
-      status: 200,
+    return new Response(JSON.stringify({ error: 'Model response was not valid JSON' }), {
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
