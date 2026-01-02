@@ -21,18 +21,16 @@ type OpenRouterResponse = {
 };
 
 const MODEL = 'deepseek/deepseek-r1-0528:free';
-const TIMEOUT_MS = 20_000;
-const MAX_TOKENS_PRIMARY = 1500;
-const MAX_TOKENS_RETRY = 2000;
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MAX_TOKENS = 700;
+const TIMEOUT_MS = 20_000;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const buildPrompt = (query: string, shorter = false) => {
-  const baseInstructions = `Return ONLY valid JSON (no markdown, no code fences, no explanations).
+const systemPrompt = `You are a concise recipe generator. Return ONLY valid JSON (no markdown, no code fences, no explanations).
 The JSON MUST match exactly this shape:
 {
   "title": string,
@@ -44,12 +42,8 @@ The JSON MUST match exactly this shape:
   "notes": string[]
 }`;
 
-  const shorterSuffix = `
-Keep ingredients concise, limit steps to 6 or fewer, and notes to 2 or fewer items. No extra text or keys.`;
-
-  return `${baseInstructions}
-User request: ${query}.${shorter ? shorterSuffix : ''}`;
-};
+const stricterSystemPrompt = `${systemPrompt}
+Do not include any extra text. Keep steps to 6 or fewer and notes to 2 or fewer items.`;
 
 const extractJsonCandidate = (rawText: string): string => {
   const trimmedStart = rawText.trimStart();
@@ -85,12 +79,12 @@ const parseRecipe = (rawText: string): FitnessRecipe | null => {
 
 const callOpenRouter = async ({
   apiKey,
-  prompt,
-  maxTokens,
+  system,
+  user,
 }: {
   apiKey: string;
-  prompt: string;
-  maxTokens: number;
+  system: string;
+  user: string;
 }): Promise<{ text?: string; finishReason?: string; error?: string }> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -100,13 +94,18 @@ const callOpenRouter = async ({
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://supabase.com',
+        'X-Title': 'M2026 generate-recipe',
       },
       body: JSON.stringify({
         model: MODEL,
         stream: false,
-        temperature: 0.3,
-        max_tokens: maxTokens,
-        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.4,
+        max_tokens: MAX_TOKENS,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
       }),
       signal: controller.signal,
     });
@@ -173,8 +172,8 @@ serve(async (req) => {
 
   const primary = await callOpenRouter({
     apiKey,
-    prompt: buildPrompt(trimmedQuery, false),
-    maxTokens: MAX_TOKENS_PRIMARY,
+    system: systemPrompt,
+    user: `User request: ${trimmedQuery}`,
   });
 
   if ('error' in primary && primary.error) {
@@ -185,17 +184,11 @@ serve(async (req) => {
   }
 
   const parsedPrimary = primary.text ? parseRecipe(primary.text) : null;
-  const shouldRetry =
-    !parsedPrimary ||
-    primary.finishReason === 'length' ||
-    primary.finishReason === 'max_tokens' ||
-    primary.finishReason === 'length_exceeded';
-
-  if (shouldRetry) {
+  if (!parsedPrimary) {
     const retry = await callOpenRouter({
       apiKey,
-      prompt: buildPrompt(trimmedQuery, true),
-      maxTokens: MAX_TOKENS_RETRY,
+      system: stricterSystemPrompt,
+      user: `User request: ${trimmedQuery}`,
     });
 
     if ('error' in retry && retry.error) {
