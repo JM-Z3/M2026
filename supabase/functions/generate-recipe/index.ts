@@ -7,22 +7,31 @@ type FitnessRecipe = {
   ingredients: Array<{ name: string; quantity: string }>;
   steps: string[];
   macros_per_serving: { calories: number; protein_g: number; carbs_g: number; fat_g: number };
+  notes: string[];
 };
 
-type GeminiResponse = {
-  candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> };
-  }>;
+type OpenRouterChoice = {
+  message?: { content?: string; reasoning?: string };
+  finish_reason?: string;
+  native_finish_reason?: string;
 };
 
-const MODEL = 'gemini-2.5-flash';
+type OpenRouterResponse = {
+  choices?: OpenRouterChoice[];
+};
+
+const MODEL = 'deepseek/deepseek-r1-0528:free';
+const TIMEOUT_MS = 20_000;
+const MAX_TOKENS_PRIMARY = 1500;
+const MAX_TOKENS_RETRY = 2000;
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const buildPrompt = (query: string, stricter = false) => {
+const buildPrompt = (query: string, shorter = false) => {
   const baseInstructions = `Return ONLY valid JSON (no markdown, no code fences, no explanations).
 The JSON MUST match exactly this shape:
 {
@@ -31,26 +40,40 @@ The JSON MUST match exactly this shape:
   "total_time_minutes": number,
   "ingredients": Array<{ "name": string, "quantity": string }>,
   "steps": string[],
-  "macros_per_serving": { "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number }
+  "macros_per_serving": { "calories": number, "protein_g": number, "carbs_g": number, "fat_g": number },
+  "notes": string[]
 }`;
 
-  const stricterSuffix = `
-If you do not produce valid JSON, the request will fail. No extra keys or text.`;
+  const shorterSuffix = `
+Keep ingredients concise, limit steps to 6 or fewer, and notes to 2 or fewer items. No extra text or keys.`;
 
   return `${baseInstructions}
-User request: ${query}.${stricter ? stricterSuffix : ''}`;
+User request: ${query}.${shorter ? shorterSuffix : ''}`;
+};
+
+const extractJsonCandidate = (rawText: string): string => {
+  const trimmedStart = rawText.trimStart();
+  const fenceMatch = trimmedStart.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
+  const withoutFences = fenceMatch ? fenceMatch[1] : trimmedStart;
+  const firstBrace = withoutFences.indexOf('{');
+  const lastBrace = withoutFences.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    return withoutFences.slice(firstBrace, lastBrace + 1);
+  }
+  return withoutFences;
 };
 
 const parseRecipe = (rawText: string): FitnessRecipe | null => {
-  const cleaned = rawText.match(/```(?:json)?\\s*([\\s\\S]*?)```/i)?.[1] ?? rawText;
   try {
-    const parsed = JSON.parse(cleaned) as FitnessRecipe;
+    const candidate = extractJsonCandidate(rawText);
+    const parsed = JSON.parse(candidate) as FitnessRecipe;
     if (
       parsed &&
       typeof parsed.title === 'string' &&
       Array.isArray(parsed.ingredients) &&
       Array.isArray(parsed.steps) &&
-      parsed.macros_per_serving
+      parsed.macros_per_serving &&
+      Array.isArray(parsed.notes)
     ) {
       return parsed;
     }
@@ -60,36 +83,51 @@ const parseRecipe = (rawText: string): FitnessRecipe | null => {
   return null;
 };
 
-const generateWithGemini = async (apiKey: string, query: string, stricter: boolean) => {
-  const prompt = buildPrompt(query, stricter);
+const callOpenRouter = async ({
+  apiKey,
+  prompt,
+  maxTokens,
+}: {
+  apiKey: string;
+  prompt: string;
+  maxTokens: number;
+}): Promise<{ text?: string; finishReason?: string; error?: string }> => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }],
-            },
-          ],
-        }),
-      }
-    );
+    const response = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        stream: false,
+        temperature: 0.3,
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const errorText = await response.text();
-      return { error: `Gemini failed ${response.status}: ${errorText}` };
+      return { error: `OpenRouter failed ${response.status}: ${errorText}` };
     }
 
-    const data = (await response.json()) as GeminiResponse;
-    const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? '').join('') ?? '';
-    return { text };
+    const data = (await response.json()) as OpenRouterResponse;
+    const choice = data.choices?.[0];
+    const finishReason = choice?.finish_reason ?? choice?.native_finish_reason;
+    const content = choice?.message?.content?.trimStart();
+    const reasoning = choice?.message?.reasoning?.trimStart();
+    const text = content && content.length > 0 ? content : reasoning ?? '';
+    return { text, finishReason };
   } catch (error) {
-    return { error: error instanceof Error ? error.message : 'Unexpected Gemini request error' };
+    clearTimeout(timeout);
+    return { error: error instanceof Error ? error.message : 'Unexpected OpenRouter request error' };
   }
 };
 
@@ -105,9 +143,9 @@ serve(async (req) => {
     });
   }
 
-  const apiKey = Deno.env.get('GEMINI_API_KEY');
+  const apiKey = Deno.env.get('OPENROUTER_API_KEY');
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'GEMINI_API_KEY is not set' }), {
+    return new Response(JSON.stringify({ error: 'OPENROUTER_API_KEY is not set' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -133,24 +171,40 @@ serve(async (req) => {
 
   const trimmedQuery = query.trim();
 
-  const firstAttempt = await generateWithGemini(apiKey, trimmedQuery, false);
-  if ('error' in firstAttempt) {
-    return new Response(JSON.stringify({ error: firstAttempt.error }), {
+  const primary = await callOpenRouter({
+    apiKey,
+    prompt: buildPrompt(trimmedQuery, false),
+    maxTokens: MAX_TOKENS_PRIMARY,
+  });
+
+  if ('error' in primary && primary.error) {
+    return new Response(JSON.stringify({ error: primary.error }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  const parsedRecipe = firstAttempt.text ? parseRecipe(firstAttempt.text) : null;
+  const parsedPrimary = primary.text ? parseRecipe(primary.text) : null;
+  const shouldRetry =
+    !parsedPrimary ||
+    primary.finishReason === 'length' ||
+    primary.finishReason === 'max_tokens' ||
+    primary.finishReason === 'length_exceeded';
 
-  if (!parsedRecipe) {
-    const retry = await generateWithGemini(apiKey, trimmedQuery, true);
-    if ('error' in retry) {
+  if (shouldRetry) {
+    const retry = await callOpenRouter({
+      apiKey,
+      prompt: buildPrompt(trimmedQuery, true),
+      maxTokens: MAX_TOKENS_RETRY,
+    });
+
+    if ('error' in retry && retry.error) {
       return new Response(JSON.stringify({ error: retry.error }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
     const retriedRecipe = retry.text ? parseRecipe(retry.text) : null;
     if (!retriedRecipe) {
       return new Response(JSON.stringify({ error: 'Model response was not valid JSON' }), {
@@ -158,13 +212,14 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
     return new Response(JSON.stringify(retriedRecipe), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
 
-  return new Response(JSON.stringify(parsedRecipe), {
+  return new Response(JSON.stringify(parsedPrimary), {
     status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   });
