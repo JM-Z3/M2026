@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Button, StyleSheet, Text, TextInput, View } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
-import { supabase } from '../services/supabaseClient';
 import { HomeStackParamList } from '../navigation/types';
-import { FitnessRecipe } from '../types/recipe';
+import { fetchRecipe } from '../services/recipeService';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'RecipeSearch'>;
 
@@ -23,29 +22,15 @@ const RecipeSearchScreen: React.FC<Props> = ({ navigation }) => {
     setIsLoading(true);
     setError(null);
 
-    const { data, error: invokeError } = await supabase.functions.invoke<FitnessRecipe | { error: string }>(
-      'generate-recipe',
-      { body: { query: trimmed } }
-    );
-
-    setIsLoading(false);
-
-    if (invokeError) {
-      setError(invokeError.message || 'Something went wrong while generating the recipe.');
-      return;
+    try {
+      const recipe = await fetchRecipe(trimmed);
+      navigation.navigate('RecipeResult', { recipe });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Something went wrong while generating the recipe.';
+      setError(`${message} Please try again.`);
+    } finally {
+      setIsLoading(false);
     }
-
-    if (data && 'error' in data) {
-      setError(data.error || 'Recipe generation failed.');
-      return;
-    }
-
-    if (!data) {
-      setError('No recipe was returned. Please try again.');
-      return;
-    }
-
-    navigation.navigate('RecipeResult', { recipe: data as FitnessRecipe });
   };
 
   return (
@@ -66,7 +51,7 @@ const RecipeSearchScreen: React.FC<Props> = ({ navigation }) => {
       {isLoading && <ActivityIndicator size="small" />}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       <Text style={styles.helperText}>
-        The recipe is generated server-side via Supabase Edge Functions using Gemini, so no API keys live in the app.
+        The recipe is generated server-side via Supabase Edge Functions, so no secrets are stored in the app.
       </Text>
     </View>
   );
