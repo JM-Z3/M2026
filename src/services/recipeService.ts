@@ -41,7 +41,7 @@ export const fetchRecipe = async (query: string): Promise<FitnessRecipe> => {
   }
 
   if (!response.ok) {
-    const message = (data as { error?: string })?.error ?? text || 'Failed to generate recipe';
+    const message = ((data as { error?: string })?.error ?? text) || 'Failed to generate recipe';
     throw new Error(message);
   }
 
