@@ -4,6 +4,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { HomeStackParamList } from '../navigation/types';
 import { fetchRecipe } from '../services/recipeService';
+import { addToHistory } from '../services/historyService';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'RecipeSearch'>;
 
@@ -24,6 +25,7 @@ const RecipeSearchScreen: React.FC<Props> = ({ navigation }) => {
 
     try {
       const recipe = await fetchRecipe(trimmed);
+      await addToHistory(recipe, trimmed);
       navigation.navigate('RecipeResult', { recipe });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong while generating the recipe.';
