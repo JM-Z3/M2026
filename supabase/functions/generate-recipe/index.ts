@@ -16,7 +16,7 @@ type OpenRouterResponse = {
   }>;
 };
 
-const MODEL = 'deepseek/deepseek-r1-0528:free';
+const MODEL = 'openai/gpt-4o-mini';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MAX_TOKENS = 600;
 const TEMPERATURE = 0.4;
