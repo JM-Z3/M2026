@@ -11,6 +11,8 @@ export type HistoryItem = {
 const STORAGE_KEY = '@m2026/recipe_history_v1';
 const MAX_ITEMS = 10;
 
+const normalizeQuery = (q: string) => q.trim().toLowerCase().replace(/\s+/g, ' ');
+
 const readHistory = async (): Promise<HistoryItem[]> => {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
@@ -30,7 +32,7 @@ const writeHistory = async (items: HistoryItem[]) => {
 const isDuplicateOfLast = (items: HistoryItem[], next: HistoryItem) => {
   const last = items[0];
   if (!last) return false;
-  return last.query === next.query && JSON.stringify(last.recipe) === JSON.stringify(next.recipe);
+  return normalizeQuery(last.query) === normalizeQuery(next.query);
 };
 
 export const getHistory = async (): Promise<HistoryItem[]> => {
