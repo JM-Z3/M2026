@@ -1,31 +1,57 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { enableScreens } from 'react-native-screens';
-import { Session } from '@supabase/supabase-js';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import LoginScreen from '../screens/LoginScreen';
 import HomeStackNavigator from './HomeStackNavigator';
+import { useAuth } from '../state/AuthContext';
 
 enableScreens();
 
-type RootNavigatorProps = {
-  session: Session | null;
-  onSignInTest: () => Promise<void>;
-  onLogout: () => Promise<void>;
-};
-
-const RootNavigator: React.FC<RootNavigatorProps> = ({ session, onSignInTest, onLogout }) => {
+const RootNavigator: React.FC = () => {
+  const { session, isAuthLoading, authError, signOut } = useAuth();
   const isLoggedIn = Boolean(session);
+
+  if (isAuthLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator />
+        <Text style={styles.helper}>Loading session...</Text>
+      </View>
+    );
+  }
+
+  if (authError) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>Auth error: {authError}</Text>
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
-      {isLoggedIn ? (
-        <HomeStackNavigator onLogout={onLogout} />
-      ) : (
-        <LoginScreen onSignInTest={onSignInTest} onLogout={onLogout} isLoggedIn={isLoggedIn} />
-      )}
+      {isLoggedIn ? <HomeStackNavigator onLogout={signOut} /> : <LoginScreen />}
     </NavigationContainer>
   );
 };
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    gap: 8,
+  },
+  helper: {
+    color: '#555',
+  },
+  error: {
+    color: 'red',
+    textAlign: 'center',
+  },
+});
 
 export default RootNavigator;
