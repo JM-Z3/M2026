@@ -8,8 +8,10 @@ type AuthContextValue = {
   user: User | null;
   isAuthLoading: boolean;
   authError: string | null;
+  devSession: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  devSignIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -20,6 +22,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(supabaseEnvError);
+  const [devSession, setDevSession] = useState(false);
 
   useEffect(() => {
     if (supabaseEnvError || !supabase) {
@@ -45,6 +48,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
+      if (newSession) {
+        setDevSession(false);
+      }
     });
 
     return () => {
@@ -68,6 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setAuthError(error.message);
       throw error;
     }
+    setDevSession(false);
   };
 
   const signUp = async (email: string, password: string) => {
@@ -78,6 +85,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setAuthError(error.message);
       throw error;
     }
+    setDevSession(false);
+  };
+
+  const devSignIn = async (email: string, password: string) => {
+    const testEmail = process.env.EXPO_PUBLIC_TEST_EMAIL;
+    const testPassword = process.env.EXPO_PUBLIC_TEST_PASSWORD;
+    if (!testEmail || !testPassword) {
+      throw new Error('Missing EXPO_PUBLIC_TEST_EMAIL or EXPO_PUBLIC_TEST_PASSWORD for dev login.');
+    }
+    if (email.trim() !== testEmail || password !== testPassword) {
+      throw new Error('Dev login failed. Check your test credentials.');
+    }
+    setAuthError(null);
+    setDevSession(true);
+    setSession(null);
+    setUser(null);
   };
 
   const signOut = async () => {
@@ -87,10 +110,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setAuthError(error.message);
       throw error;
     }
+    setDevSession(false);
   };
 
   return (
-    <AuthContext.Provider value={{ session, user, isAuthLoading, authError, signIn, signUp, signOut }}>
+    <AuthContext.Provider
+      value={{ session, user, isAuthLoading, authError, devSession, signIn, signUp, devSignIn, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );

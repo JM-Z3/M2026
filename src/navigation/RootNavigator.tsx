@@ -10,8 +10,8 @@ import { useAuth } from '../state/AuthContext';
 enableScreens();
 
 const RootNavigator: React.FC = () => {
-  const { session, isAuthLoading, authError, signOut } = useAuth();
-  const isLoggedIn = Boolean(session);
+  const { session, isAuthLoading, authError, signOut, devSession } = useAuth();
+  const isLoggedIn = Boolean(session) || devSession;
 
   if (isAuthLoading) {
     return (
@@ -22,7 +22,7 @@ const RootNavigator: React.FC = () => {
     );
   }
 
-  if (authError) {
+  if (authError && !devSession) {
     return (
       <View style={styles.center}>
         <Text style={styles.error}>Auth error: {authError}</Text>
