@@ -4,13 +4,13 @@ import { ActivityIndicator, Button, StyleSheet, Text, TextInput, View } from 're
 import { useAuth } from '../state/AuthContext';
 
 const LoginScreen: React.FC = () => {
-  const { signIn, signUp, authError } = useAuth();
+  const { signIn, signUp, devSignIn, authError } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const handleAction = async (action: 'signin' | 'signup') => {
+  const handleAction = async (action: 'signin' | 'signup' | 'dev') => {
     if (!email.trim() || !password.trim()) {
       setLocalError('Please enter email and password.');
       return;
@@ -21,8 +21,10 @@ const LoginScreen: React.FC = () => {
     try {
       if (action === 'signin') {
         await signIn(email.trim(), password);
-      } else {
+      } else if (action === 'signup') {
         await signUp(email.trim(), password);
+      } else {
+        await devSignIn(email.trim(), password);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Authentication failed';
@@ -56,6 +58,10 @@ const LoginScreen: React.FC = () => {
         <Button title="Sign in" onPress={() => handleAction('signin')} disabled={isSubmitting} />
         <Button title="Sign up" onPress={() => handleAction('signup')} disabled={isSubmitting} />
       </View>
+      <View style={styles.devButton}>
+        <Button title="Dev Login" onPress={() => handleAction('dev')} disabled={isSubmitting} />
+        <Text style={styles.devNote}>Temporary dev-only login.</Text>
+      </View>
       {isSubmitting && <ActivityIndicator />}
       {(localError || authError) && <Text style={styles.error}>{localError || authError}</Text>}
     </View>
@@ -84,6 +90,14 @@ const styles = StyleSheet.create({
   buttons: {
     flexDirection: 'row',
     gap: 12,
+  },
+  devButton: {
+    alignItems: 'center',
+    gap: 6,
+  },
+  devNote: {
+    fontSize: 12,
+    color: '#777',
   },
   error: {
     color: 'red',
