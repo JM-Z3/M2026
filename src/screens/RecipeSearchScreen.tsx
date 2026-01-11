@@ -1,10 +1,18 @@
 import React, { useState } from 'react';
+<<<<<<< HEAD
 import { ActivityIndicator, Button, StyleSheet, Text, TextInput, View } from 'react-native';
+=======
+import { ActivityIndicator, Alert, Button, StyleSheet, Text, TextInput, View } from 'react-native';
+>>>>>>> 7a29051 (Improve login screen UI)
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { HomeStackParamList } from '../navigation/types';
 import { fetchRecipe } from '../services/recipeService';
 import { addToHistory } from '../services/historyService';
+<<<<<<< HEAD
+=======
+import { saveRecipeToCloud } from '../services/cloudHistoryService';
+>>>>>>> 7a29051 (Improve login screen UI)
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'RecipeSearch'>;
 
@@ -26,6 +34,15 @@ const RecipeSearchScreen: React.FC<Props> = ({ navigation }) => {
     try {
       const recipe = await fetchRecipe(trimmed);
       await addToHistory(recipe, trimmed);
+<<<<<<< HEAD
+=======
+      try {
+        await saveRecipeToCloud(trimmed, recipe);
+      } catch (cloudErr) {
+        const message = cloudErr instanceof Error ? cloudErr.message : 'Unable to save history to cloud.';
+        Alert.alert('Cloud history', message);
+      }
+>>>>>>> 7a29051 (Improve login screen UI)
       navigation.navigate('RecipeResult', { recipe });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong while generating the recipe.';
