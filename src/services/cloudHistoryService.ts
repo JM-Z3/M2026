@@ -53,9 +53,10 @@ export const saveRecipeToCloud = async (query: string, recipe: FitnessRecipe) =>
     throw new Error(insertError.message);
   }
 
-  await client.rpc('prune_recipe_history', { limit_count: 10 }).catch(() => {
+  const { error: pruneError } = await client.rpc('prune_recipe_history', { limit_count: 10 });
+  if (pruneError) {
     // Ignore prune errors to avoid blocking the user flow.
-  });
+  }
 };
 
 export const getCloudHistory = async (): Promise<CloudHistoryItem[]> => {
